@@ -21,6 +21,7 @@
 import { build } from 'esbuild'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import process from 'node:process'
 
 // Why absolute, not cwd-relative: `pnpm lint` runs from the repo root but CI steps and
@@ -159,6 +160,10 @@ ${removed.map((file) => `  - ${file}`).join('\n')}
   console.log(`[runtime-electron-ratchet] ok — ${current.length} entries, unchanged.`)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Why pathToFileURL and not a `file://` template: on Windows process.argv[1] is a
+// native path (C:\repo\...) while import.meta.url is file:///C:/repo/..., so the
+// template never matches and the gate would exit 0 without checking anything — a
+// lint gate that fails open. Same idiom as check-max-lines-ratchet.mjs:225.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main()
 }

@@ -38,7 +38,28 @@ const ENTRY_POINTS = [
 
 // Native addons and electron cannot be bundled; externalising them is what the
 // relay build already does (config/scripts/build-relay.mjs).
-const EXTERNAL = ['electron', 'node-pty', '@parcel/watcher', 'better-sqlite3', 'keytar', 'fsevents']
+const EXTERNAL = [
+  'electron',
+  'node-pty',
+  '@parcel/watcher',
+  'better-sqlite3',
+  'keytar',
+  'fsevents',
+  'cpu-features'
+]
+
+/**
+ * Why: some optional native deps (ssh2's cpu-features) reference a prebuilt `.node`
+ * that only exists where a build toolchain has run. Resolving them made this gate
+ * pass on a developer machine and hard-fail on CI. Nothing here needs the addon —
+ * only the import graph — so mark every `.node` external instead.
+ */
+const externalNativeAddons = {
+  name: 'external-native-addons',
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /\.node$/ }, (args) => ({ path: args.path, external: true }))
+  }
+}
 
 export async function collectElectronImporters(entryPoints = ENTRY_POINTS) {
   const result = await build({
@@ -55,7 +76,7 @@ export async function collectElectronImporters(entryPoints = ENTRY_POINTS) {
     metafile: true,
     absWorkingDir: ROOT,
     logLevel: 'silent',
-    loader: { '.node': 'file' }
+    plugins: [externalNativeAddons]
   })
   const importers = new Set()
   for (const [file, info] of Object.entries(result.metafile.inputs)) {

@@ -898,9 +898,9 @@ if (hasSingleInstanceLock) {
   // desktop supplies it; a Node host has no Chromium proxy config to consult, so the
   // environment variables are the whole answer there.
   setDefaultProxySessionResolver(() => session.defaultSession)
-  // Why here: integrations fetch through Chromium's network stack on the desktop. A Node
-  // host falls back to globalThis.fetch, which is a real behavioural difference (proxy
-  // from the environment, Node's user agent) rather than a transparent swap.
+  // Why here: integrations use Chromium's network stack on the desktop. A Node host
+  // falls back to the platform default, which is a real behavioural difference (proxy
+  // read from the environment, Node's user agent) rather than a transparent swap.
   setMainHttpClient(electronHttpClient)
   // Why: couple to dev-parent only for electron-vite desktop runs; `orca serve`'s parent (CLI shim/background shell) isn't the intended server lifetime.
   const shouldCoupleToDevParent = is.dev && !isServeMode

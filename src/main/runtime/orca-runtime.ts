@@ -730,7 +730,8 @@ import {
 } from '../../shared/claude-agent-teams-tmux-compat'
 import { joinWorktreeRelativePath } from './runtime-relative-paths'
 import { collectMemorySnapshot } from '../memory/collector'
-import { app, BrowserWindow, ipcMain, Notification } from 'electron'
+import { BrowserWindow, ipcMain, Notification } from 'electron'
+import { getAppEnvironment } from '../../shared/app-environment'
 import { RendererPublicationThrottle } from '../window/renderer-publication-throttle'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
 import type { BrowserBackend } from '../browser/browser-backend'
@@ -3924,7 +3925,7 @@ export class OrcaRuntimeService {
         return
       }
       await applyAgentStatusHooksEnabled(settings.agentStatusHooksEnabled !== false, settings, {
-        shouldHydrateShellPath: app.isPackaged,
+        shouldHydrateShellPath: getAppEnvironment().isPackaged(),
         onInstallError: recordManagedHookInstallFailure,
         shouldContinue: (agent) => {
           const current = this.store?.getSettings()
@@ -4232,13 +4233,12 @@ export class OrcaRuntimeService {
     return { projectId, workspaceMode: 'new_per_run', workspaceId: null }
   }
 
-  // Why: lazy initialization — the DB path depends on Electron's userData
-  // which may not be finalized until after app.ready. Also allows unit tests
-  // to inject an in-memory DB without touching the filesystem.
+  // Why: lazy initialization — the DB path depends on userData, which on the desktop
+  // is not finalized until after app.ready. Also allows unit tests to inject an
+  // in-memory DB without touching the filesystem.
   getOrchestrationDb(): OrchestrationDb {
     if (!this._orchestrationDb) {
-      const { app } = require('electron')
-      const dbPath = join(app.getPath('userData'), 'orchestration.db')
+      const dbPath = join(getAppEnvironment().getPath('userData'), 'orchestration.db')
       this._orchestrationDb = new OrchestrationDb(dbPath)
       this.ensureOrchestrationFederationRelay()
       this.scheduleRestoredMessageRepoints()
@@ -4999,7 +4999,10 @@ export class OrcaRuntimeService {
     signal?: AbortSignal
   ): Promise<AgentSkillShareOperation> {
     const selectedSkills = selectDiscoveredSkills(discoveredSkills, request.skillSelectors)
-    const operationRoot = join(app.getPath('userData'), 'agent-skill-share-operations')
+    const operationRoot = join(
+      getAppEnvironment().getPath('userData'),
+      'agent-skill-share-operations'
+    )
     const cloud = this.requireSkillCloudService()
     const preparations = new SkillSharePreparationService(
       operationRoot,
@@ -5008,7 +5011,7 @@ export class OrcaRuntimeService {
         createShare: (packageId, input) => cloud.createShare(packageId, input)
       },
       {
-        installStateDirectory: join(app.getPath('userData'), 'skill-installs')
+        installStateDirectory: join(getAppEnvironment().getPath('userData'), 'skill-installs')
       }
     )
     let preparationId: string | null = null
@@ -5215,7 +5218,7 @@ export class OrcaRuntimeService {
       if (sshTarget) {
         return installSkillBundleOnSshHost({
           provider: sshTarget.provider,
-          userDataPath: app.getPath('userData'),
+          userDataPath: getAppEnvironment().getPath('userData'),
           request: {
             ...request,
             destination:
@@ -5224,14 +5227,14 @@ export class OrcaRuntimeService {
                 : request.destination
           },
           workspace: sshTarget.workspace,
-          requireHttps: app.isPackaged,
+          requireHttps: getAppEnvironment().isPackaged(),
           signal: controller.signal,
           onProgress: reportProgress
         })
       }
       await this.skillTransactionRecovery
       const allowedDownloadOrigins = ['https://storage.googleapis.com']
-      if (!app.isPackaged && process.env.ORCA_SKILL_PACKAGE_DOWNLOAD_ORIGINS) {
+      if (!getAppEnvironment().isPackaged() && process.env.ORCA_SKILL_PACKAGE_DOWNLOAD_ORIGINS) {
         allowedDownloadOrigins.push(
           ...process.env.ORCA_SKILL_PACKAGE_DOWNLOAD_ORIGINS.split(',')
             .map((origin) => origin.trim())
@@ -5240,9 +5243,9 @@ export class OrcaRuntimeService {
       }
       return await executeSkillBundleInstallRequest(request, {
         authority: this.skillInstallDestinationAuthority(runtimeId),
-        stateDirectory: app.getPath('userData'),
+        stateDirectory: getAppEnvironment().getPath('userData'),
         allowedDownloadOrigins: [...new Set(allowedDownloadOrigins)],
-        requireHttps: app.isPackaged,
+        requireHttps: getAppEnvironment().isPackaged(),
         resolveStagedUpload: (uploadId, identity) =>
           this.requireSkillUploadSessions().take(uploadId, identity),
         detectProviders: detectInstalledAgentsWithShellPathHydration,
@@ -5279,7 +5282,7 @@ export class OrcaRuntimeService {
     if (sshTarget) {
       return installSkillOnSshHost({
         provider: sshTarget.provider,
-        userDataPath: app.getPath('userData'),
+        userDataPath: getAppEnvironment().getPath('userData'),
         request: {
           ...request,
           destination:
@@ -5288,13 +5291,13 @@ export class OrcaRuntimeService {
               : request.destination
         },
         workspace: sshTarget.workspace,
-        requireHttps: app.isPackaged,
+        requireHttps: getAppEnvironment().isPackaged(),
         signal
       })
     }
     await this.skillTransactionRecovery
     const allowedDownloadOrigins = ['https://storage.googleapis.com']
-    if (!app.isPackaged && process.env.ORCA_SKILL_PACKAGE_DOWNLOAD_ORIGINS) {
+    if (!getAppEnvironment().isPackaged() && process.env.ORCA_SKILL_PACKAGE_DOWNLOAD_ORIGINS) {
       allowedDownloadOrigins.push(
         ...process.env.ORCA_SKILL_PACKAGE_DOWNLOAD_ORIGINS.split(',')
           .map((origin) => origin.trim())
@@ -5303,9 +5306,9 @@ export class OrcaRuntimeService {
     }
     return executeSkillInstallRequest(request, {
       authority: this.skillInstallDestinationAuthority(runtimeId),
-      stateDirectory: app.getPath('userData'),
+      stateDirectory: getAppEnvironment().getPath('userData'),
       allowedDownloadOrigins: [...new Set(allowedDownloadOrigins)],
-      requireHttps: app.isPackaged,
+      requireHttps: getAppEnvironment().isPackaged(),
       resolveStagedUpload: (uploadId, identity) =>
         this.requireSkillUploadSessions().take(uploadId, identity),
       detectProviders: detectInstalledAgentsWithShellPathHydration,
@@ -5336,7 +5339,7 @@ export class OrcaRuntimeService {
     await this.skillTransactionRecovery
     return previewSharedSkillInstall(request, {
       authority: this.skillInstallDestinationAuthority(runtimeId),
-      stateDirectory: app.getPath('userData'),
+      stateDirectory: getAppEnvironment().getPath('userData'),
       detectProviders: detectInstalledAgentsWithShellPathHydration,
       resolveProviderRootOverrides: (destination) =>
         this.resolveSkillProviderRootOverrides(destination)
@@ -5364,7 +5367,7 @@ export class OrcaRuntimeService {
     const runtimeId = this.getStatus().runtimeId
     return previewSharedSkillBundleInstall(request, {
       authority: this.skillInstallDestinationAuthority(runtimeId),
-      stateDirectory: app.getPath('userData'),
+      stateDirectory: getAppEnvironment().getPath('userData'),
       detectProviders: detectInstalledAgentsWithShellPathHydration,
       resolveProviderRootOverrides: (destination) =>
         this.resolveSkillProviderRootOverrides(destination)
@@ -5390,7 +5393,7 @@ export class OrcaRuntimeService {
     await this.skillTransactionRecovery
     return removeSharedSkillInstall(request, {
       authority: this.skillInstallDestinationAuthority(runtimeId),
-      stateDirectory: app.getPath('userData'),
+      stateDirectory: getAppEnvironment().getPath('userData'),
       detectProviders: detectInstalledAgentsWithShellPathHydration,
       resolveProviderRootOverrides: (destination) =>
         this.resolveSkillProviderRootOverrides(destination)
@@ -5409,7 +5412,7 @@ export class OrcaRuntimeService {
     await this.skillTransactionRecovery
     const runtimeId = this.getStatus().runtimeId
     const [installs, worktrees] = await Promise.all([
-      listManagedSkillInstalls(join(app.getPath('userData'), 'skill-installs'), {
+      listManagedSkillInstalls(join(getAppEnvironment().getPath('userData'), 'skill-installs'), {
         observeReceipt: async (receipt) => {
           if (!receipt.wslDistro) {
             return nativeSkillInstallFilesystem.observeSkill(
@@ -5705,7 +5708,11 @@ export class OrcaRuntimeService {
       throw new Error('skill-upload-service-disposed')
     }
     this.skillUploadSessions ??= new SkillUploadSessionService(
-      join(app.getPath('userData'), 'skill-installs', SKILL_UPLOAD_STAGING_ROOT_NAME)
+      join(
+        getAppEnvironment().getPath('userData'),
+        'skill-installs',
+        SKILL_UPLOAD_STAGING_ROOT_NAME
+      )
     )
     return this.skillUploadSessions
   }

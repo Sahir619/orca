@@ -6,5 +6,4 @@
 src/main/browser/cdp-bridge.ts
 src/main/ipc/filesystem-watcher.ts
 src/main/jira/authenticated-request.ts
-src/main/network/proxy-settings.ts
 src/main/speech/model-manager.ts

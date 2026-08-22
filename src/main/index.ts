@@ -2,7 +2,16 @@
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import os from 'node:os'
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, powerMonitor, type Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  powerMonitor,
+  type Tray,
+  session
+} from 'electron'
 import { initTccPromptNotice, stopTccPromptNotice } from './macos-tcc-prompt-notice'
 import { electronApp, is } from '@electron-toolkit/utils'
 import {
@@ -18,6 +27,7 @@ import { electronRuntimeDesktopSurface } from './host/electron-runtime-desktop-s
 import { setRuntimeDesktopSurface } from './runtime/runtime-desktop-surface'
 import { electronRuntimeBrowserCommandsFactory } from './host/electron-browser-commands'
 import { setRuntimeBrowserCommandsFactory } from './runtime/runtime-browser-commands-factory'
+import { setDefaultProxySessionResolver } from './network/proxy-settings'
 import { setSecretStore } from '../shared/secret-store'
 import { ElectronSecretStore } from './host/electron-secret-store'
 import { initSessionParseCachePersistence } from './ai-vault/session-parse-cache-persistence'
@@ -880,6 +890,10 @@ if (hasSingleInstanceLock) {
   // cluster into the graph. The desktop installs it; a Node host installs none and every
   // browser RPC rejects, which capability filtering already tells clients about.
   setRuntimeBrowserCommandsFactory(electronRuntimeBrowserCommandsFactory)
+  // Why here: proxy-settings only needed electron for `session.defaultSession`. The
+  // desktop supplies it; a Node host has no Chromium proxy config to consult, so the
+  // environment variables are the whole answer there.
+  setDefaultProxySessionResolver(() => session.defaultSession)
   // Why: couple to dev-parent only for electron-vite desktop runs; `orca serve`'s parent (CLI shim/background shell) isn't the intended server lifetime.
   const shouldCoupleToDevParent = is.dev && !isServeMode
   installDevParentDisconnectQuit(shouldCoupleToDevParent)

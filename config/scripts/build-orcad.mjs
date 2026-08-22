@@ -14,7 +14,7 @@ import process from 'node:process'
 
 const ROOT = join(import.meta.dirname, '..', '..')
 const OUT_DIR = join(ROOT, 'out', 'orcad')
-const ENTRY = join(ROOT, 'src', 'main', 'orcad', 'orcad-entry.ts')
+const ENTRY = join(ROOT, 'src/main/orcad/main.ts')
 
 // Native addons must exist on the host; they cannot be bundled.
 // `electron` is external so a residual import fails loudly at require() time rather

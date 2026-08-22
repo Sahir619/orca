@@ -4,6 +4,7 @@
 # portable; migrate the module behind a host port instead (src/main/host/).
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 ||||||| parent of 33eeec7a97c (refactor(host): resolve the app root through the port in fork-reachable modules)
 src/main/ai-vault/session-scanner-service-entry-path.ts
 src/main/browser/browser-cookie-clear-store.ts
@@ -59,3 +60,8 @@ src/main/runtime/orca-runtime-browser.ts
 src/main/runtime/orca-runtime.ts
 >>>>>>> 33eeec7a97c (refactor(host): resolve the app root through the port in fork-reachable modules)
 src/main/speech/model-manager.ts
+||||||| parent of 84a185c670d (feat(orcad): boot the Orca runtime on plain Node)
+src/main/ipc/filesystem-watcher.ts
+src/main/speech/model-manager.ts
+=======
+>>>>>>> 84a185c670d (feat(orcad): boot the Orca runtime on plain Node)

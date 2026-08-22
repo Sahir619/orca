@@ -20,7 +20,7 @@
  *   - the server exits when asked.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -28,6 +28,7 @@ import process from 'node:process'
 
 const projectDir = resolve(import.meta.dirname, '../..')
 const serveEntry = join(projectDir, 'out', 'main', 'index.js')
+const ORCAD_ENTRY = join(projectDir, 'out', 'orcad', 'orcad.js')
 const READY_TIMEOUT_MS = 120_000
 const OUTPUT_TIMEOUT_MS = 30_000
 const SHUTDOWN_TIMEOUT_MS = 15_000
@@ -125,50 +126,127 @@ async function waitForNonce(pairingCode, terminalHandle, nonce) {
   return false
 }
 
+/**
+ * The two hosts this acceptance drives.
+ *
+ * Everything after boot — pairing, worktree list, terminal create, the nonce round trip —
+ * is identical for both. That is the point: the Node artifact has to satisfy the same
+ * contract as the Electron server, proven by the same code rather than a parallel test
+ * that could drift into asserting less.
+ */
+function resolveLaunch(userDataDir) {
+  // Why a flag and not just an env var: package scripts have to set this on Windows too,
+  // and `FOO=bar cmd` is not portable there.
+  const flagIndex = process.argv.indexOf('--target')
+  const target =
+    flagIndex !== -1 ? process.argv[flagIndex + 1] : (process.env.ORCA_SMOKE_TARGET ?? 'electron')
+  if (target === 'orcad') {
+    return {
+      label: `orcad (${ORCAD_ENTRY})`,
+      command: process.execPath,
+      args: [ORCAD_ENTRY, '--port', String(PORT), '--json'],
+      env: { ORCA_USER_DATA: userDataDir }
+    }
+  }
+  if (target !== 'electron') {
+    throw new Error(
+      `--target (or ORCA_SMOKE_TARGET) must be 'electron' or 'orcad', got '${target}'`
+    )
+  }
+  const serveArgs = [
+    serveEntry,
+    '--serve',
+    '--serve-port',
+    String(PORT),
+    '--serve-json',
+    `--user-data-dir=${userDataDir}`
+  ]
+  const override = process.env.ORCA_SMOKE_ELECTRON
+  return {
+    label: `electron (${serveEntry})`,
+    command: override ?? 'npx',
+    args: override ? serveArgs : ['electron', ...serveArgs],
+    env: {}
+  }
+}
+
+/** A throwaway git repo with one commit, so `repo add` has something real to register. */
+function seedGitRepo() {
+  const dir = mkdtempSync(join(tmpdir(), 'orca-smoke-repo-'))
+  writeFileSync(join(dir, 'README.md'), '# orca smoke\n')
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' })
+    if (result.status !== 0) {
+      throw new Error(`git ${args.join(' ')} failed: ${result.stderr || result.stdout}`)
+    }
+  }
+  git('init', '-b', 'main')
+  git('config', 'user.email', 'smoke@orca.test')
+  git('config', 'user.name', 'Orca Smoke')
+  git('add', '-A')
+  git('commit', '-m', 'seed')
+  return dir
+}
+
 async function main() {
   const userDataDir = mkdtempSync(join(tmpdir(), 'orca-serve-smoke-'))
-  log(`booting ${serveEntry} on port ${PORT} with userData ${userDataDir}`)
+  const launch = resolveLaunch(userDataDir)
+  log(`booting ${launch.label} on port ${PORT} with userData ${userDataDir}`)
 
-  const child = spawn(
-    process.env.ORCA_SMOKE_ELECTRON ?? 'npx',
-    process.env.ORCA_SMOKE_ELECTRON
-      ? [
-          serveEntry,
-          '--serve',
-          '--serve-port',
-          String(PORT),
-          '--serve-json',
-          `--user-data-dir=${userDataDir}`
-        ]
-      : [
-          'electron',
-          serveEntry,
-          '--serve',
-          '--serve-port',
-          String(PORT),
-          '--serve-json',
-          `--user-data-dir=${userDataDir}`
-        ],
-    { stdio: ['ignore', 'pipe', 'pipe'] }
-  )
+  // Why tracked out here: the worktree lands in the real workspaces root, not the temp
+  // profile, so the finally block has to remove it explicitly or every run leaks one.
+  let seeded = null
+  let pairing = null
+
+  const child = spawn(launch.command, launch.args, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, ...launch.env }
+  })
 
   try {
     const ready = await waitForReady(child)
     log(`ready: ${ready.advertisedEndpoint}`)
     const pairingCode = pairingCodeFrom(ready)
+    pairing = pairingCode
 
-    const worktrees = orca(pairingCode, ['worktree', 'list'])?.worktrees ?? []
-    if (worktrees.length === 0) {
-      throw new Error('paired client saw no worktrees; cannot create a terminal')
+    // Why seed instead of using whatever the profile already holds: a hermetic repo makes
+    // this runnable on a clean CI box, keeps the assertion deterministic, and exercises
+    // repo.add + worktree.create rather than assuming someone else registered a worktree.
+    const repoPath = seedGitRepo()
+    seeded = { repoPath }
+    log(`seeded repo at ${repoPath}`)
+    const repo = orca(pairingCode, ['repo', 'add', '--path', repoPath])?.repo
+    if (!repo?.id) {
+      throw new Error('repo.add returned no repo id')
     }
-    log(`paired client sees ${worktrees.length} worktree(s)`)
 
-    const terminal = orca(pairingCode, [
-      'terminal',
+    const worktreeName = `smoke-${randomBytes(4).toString('hex')}`
+    const created = orca(pairingCode, [
+      'worktree',
       'create',
-      '--worktree',
-      worktrees[0].id
-    ])?.terminal
+      '--repo',
+      `id:${repo.id}`,
+      '--name',
+      worktreeName,
+      '--setup',
+      'skip'
+    ])?.worktree
+    if (!created?.id) {
+      throw new Error('worktree.create returned no worktree id')
+    }
+    seeded.worktreeId = created.id
+    log(`created worktree ${created.id}`)
+
+    // Why `show` and not membership in `list`: list is capped, and the Electron target
+    // reads a shared dev profile that can already hold more worktrees than the cap. The
+    // point is that the server persisted and can resolve THIS worktree.
+    const shown = orca(pairingCode, ['worktree', 'show', '--worktree', created.id])?.worktree
+    if (shown?.id !== created.id) {
+      throw new Error('worktree.create succeeded but worktree.show cannot resolve it')
+    }
+    log(`server resolves ${shown.id}`)
+
+    const terminal = orca(pairingCode, ['terminal', 'create', '--worktree', created.id])?.terminal
     if (!terminal?.handle) {
       throw new Error('terminal.create returned no handle')
     }
@@ -196,6 +274,29 @@ async function main() {
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error))
   } finally {
+    // Why before SIGTERM: worktree removal is a server operation, so it needs the server.
+    if (seeded?.worktreeId && pairing) {
+      const removed = spawnSync(
+        'orca',
+        [
+          'worktree',
+          'rm',
+          '--worktree',
+          seeded.worktreeId,
+          '--pairing-code',
+          pairing,
+          '--force',
+          '--json'
+        ],
+        { encoding: 'utf8' }
+      )
+      if (removed.status !== 0) {
+        log(
+          `WARN: could not remove seeded worktree ${seeded.worktreeId}: ` +
+            `${(removed.stderr?.trim() || removed.stdout?.trim() || '').replace(/\s+/g, ' ')} (exit ${removed.status})`
+        )
+      }
+    }
     child.kill('SIGTERM')
     const exited = await Promise.race([
       new Promise((r) => child.on('exit', () => r(true))),
@@ -206,6 +307,9 @@ async function main() {
       fail(`server did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM`)
     }
     rmSync(userDataDir, { recursive: true, force: true })
+    if (seeded?.repoPath) {
+      rmSync(seeded.repoPath, { recursive: true, force: true })
+    }
   }
 
   if (!process.exitCode) {

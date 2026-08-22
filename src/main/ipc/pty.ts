@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Why: PTY IPC is centralized in one main-process module so spawn env scoping, lifecycle cleanup, process inspection, and renderer IPC stay behind one audited boundary. */
 import { join, delimiter } from 'node:path'
+import { getAppEnvironment } from '../../shared/app-environment'
 import { isRendererGone, rendererWebContents, sendToRenderer } from './pty-renderer-surface'
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
@@ -9,7 +10,6 @@ import {
   type IpcMainInvokeEvent,
   type WebContents,
   ipcMain,
-  app,
   powerMonitor
 } from 'electron'
 export { getBashShellReadyRcfileContent } from '../providers/local-pty-shell-ready-bash-rcfile'
@@ -2531,9 +2531,9 @@ export function registerPtyHandlers(
         const skipCodexHomeEnv = ctx?.isWsl === true && !selectedCodexHomePath
         const ptySettings = getSettings?.()
         const env = buildPtyHostEnv(id, baseEnv, {
-          isPackaged: app.isPackaged,
+          isPackaged: getAppEnvironment().isPackaged(),
           resourcesPath: process.resourcesPath,
-          userDataPath: app.getPath('userData'),
+          userDataPath: getAppEnvironment().getPath('userData'),
           selectedCodexHomePath,
           skipCodexHomeEnv,
           stripInheritedOrcaCodexHome: shouldStripInheritedOrcaCodexHome({
@@ -2885,7 +2885,7 @@ export function registerPtyHandlers(
     perPty.sort((a, b) => b.inFlightChars + b.pendingChars - (a.inFlightChars + a.pendingChars))
     const windowAlive = !isRendererGone(mainWindow)
     return {
-      appVersion: app.getVersion(),
+      appVersion: getAppEnvironment().getVersion(),
       mainUptimeMs: Math.round(process.uptime() * 1000),
       windowFocused: windowAlive ? mainWindow!.isFocused() : null,
       windowVisible: windowAlive ? mainWindow!.isVisible() : null,
@@ -4807,13 +4807,13 @@ export function registerPtyHandlers(
           settings: ptySettings
         })
       if (isDaemonHostSpawn && sessionId && !preAdoptedStablePane) {
-        if (!isSafePtySessionId(sessionId, app.getPath('userData'))) {
+        if (!isSafePtySessionId(sessionId, getAppEnvironment().getPath('userData'))) {
           throw new Error('Invalid PTY session id')
         }
         env = buildPtyHostEnv(sessionId, env ?? {}, {
-          isPackaged: app.isPackaged,
+          isPackaged: getAppEnvironment().isPackaged(),
           resourcesPath: process.resourcesPath,
-          userDataPath: app.getPath('userData'),
+          userDataPath: getAppEnvironment().getPath('userData'),
           selectedCodexHomePath,
           skipCodexHomeEnv,
           stripInheritedOrcaCodexHome,
@@ -6550,16 +6550,16 @@ export function registerPtyHandlers(
           }
           const sessionIdForEnv = effectiveSessionId
           // Why: this id reaches filesystem paths; reject traversal/separators so a crafted IPC payload can't escape the expected roots.
-          if (!isSafePtySessionId(sessionIdForEnv, app.getPath('userData'))) {
+          if (!isSafePtySessionId(sessionIdForEnv, getAppEnvironment().getPath('userData'))) {
             throw new Error('Invalid PTY session id')
           }
           // Why: clone before mutating so injections don't leak back into args.env (renderer may reuse it).
           env = { ...baseEnv }
           try {
             buildPtyHostEnv(sessionIdForEnv, env, {
-              isPackaged: app.isPackaged,
+              isPackaged: getAppEnvironment().isPackaged(),
               resourcesPath: process.resourcesPath,
-              userDataPath: app.getPath('userData'),
+              userDataPath: getAppEnvironment().getPath('userData'),
               selectedCodexHomePath,
               skipCodexHomeEnv,
               stripInheritedOrcaCodexHome,

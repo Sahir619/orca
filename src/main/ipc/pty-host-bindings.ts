@@ -20,9 +20,7 @@ import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron'
  * would need a cast that hides genuine mismatches.
  */
 export type PtyIpcSurface = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mirrors electron's IpcMain
   handle(channel: string, listener: (event: IpcMainInvokeEvent, ...args: any[]) => unknown): void
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mirrors electron's IpcMain
   on(channel: string, listener: (event: IpcMainEvent, ...args: any[]) => void): void
   removeHandler(channel: string): void
   removeAllListeners(channel: string): void

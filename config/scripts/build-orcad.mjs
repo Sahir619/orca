@@ -86,6 +86,10 @@ if (electronImporters.size > 0) {
     `[build-orcad] ${electronImporters.size} module(s) in the bundle import electron:
 ${[...electronImporters].map((f) => `  - ${f}`).join('\n')}`
   )
+  // Why this can exceed the ratchet baseline: the ratchet measures the graph reachable
+  // from orca-runtime + runtime-rpc, but this entry also imports ipc/pty directly to
+  // install the PTY controller. Once orcad ships, it should become a ratchet entry
+  // point so the two numbers cannot drift.
   process.exitCode = 1
 } else {
   console.log(

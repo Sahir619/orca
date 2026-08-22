@@ -71,10 +71,17 @@ function orca(pairingCode, args) {
 function waitForReady(child) {
   return new Promise((resolvePromise, rejectPromise) => {
     let buffered = ''
+    let serverErr = ''
     const timer = setTimeout(
       () => rejectPromise(new Error(`no ready payload within ${READY_TIMEOUT_MS}ms`)),
       READY_TIMEOUT_MS
     )
+    // Why read stderr at all: an unread pipe can fill and block the child, and without it
+    // a boot failure surfaces only as "exited with 1", which says nothing actionable.
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk) => {
+      serverErr += chunk
+    })
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk) => {
       buffered += chunk
@@ -96,7 +103,13 @@ function waitForReady(child) {
     })
     child.on('exit', (code) => {
       clearTimeout(timer)
-      rejectPromise(new Error(`server exited with ${code} before signalling ready`))
+      rejectPromise(
+        new Error(
+          `server exited with ${code} before signalling ready${
+            serverErr.trim() ? `:\n${serverErr.trim()}` : ' (no stderr)'
+          }`
+        )
+      )
     })
   })
 }

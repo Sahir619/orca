@@ -656,7 +656,8 @@ import {
 } from '../ports/workspace-port-ownership'
 import { advertisedUrlWatcher } from '../ports/advertised-url-watcher'
 import type { AutomationService } from '../automations/service'
-import { RuntimeBrowserCommands } from './orca-runtime-browser'
+import type { RuntimeBrowserCommands } from './orca-runtime-browser'
+import { createRuntimeBrowserCommands } from './runtime-browser-commands-factory'
 import { RemoteRuntimeTerminalCreateIdempotency } from './remote-runtime-terminal-create-idempotency'
 import { deriveRemoteRuntimeTerminalCreateHandle } from './remote-runtime-terminal-create-identity'
 import {
@@ -38102,7 +38103,7 @@ export class OrcaRuntimeService {
 
   // ── Browser automation ──
 
-  private readonly browserCommands = new RuntimeBrowserCommands({
+  private readonly browserCommands = createRuntimeBrowserCommands({
     getAgentBrowserBridge: () => this.agentBrowserBridge,
     resolveWorktreeSelector: (selector) => this.resolveWorktreeSelector(selector),
     getAuthoritativeWindow: () => this.getAuthoritativeWindow(),

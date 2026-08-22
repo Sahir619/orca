@@ -4,11 +4,11 @@ import type { BrowserWindow, WebContents } from 'electron'
  * The renderer surface the PTY handlers talk to, which may not exist.
  *
  * Why: `orca serve` — and a future Node-only backend — run the same PTY handlers
- * with no window. Today that is faked: `registerHeadlessPtyRuntime` builds a
- * `BrowserWindow` whose `isDestroyed()` returns true and whose `webContents.send`
- * is a no-op, purely to satisfy the type. That is the "looks fine, silently lies"
- * shape this codebase rejects elsewhere, and it forces an `electron` value import
- * into a path that otherwise needs none.
+ * with no window. That used to be faked: `registerHeadlessPtyRuntime` built a
+ * `BrowserWindow` whose `isDestroyed()` returned true and whose `webContents.send`
+ * was a no-op, purely to satisfy the type — the "looks fine, silently lies" shape
+ * this codebase rejects elsewhere, and what forced an `electron` value import into a
+ * path that needs none. It now passes `null`.
  *
  * An absent renderer is semantically identical to a destroyed one — every call site
  * already guards on `isDestroyed()` and skips — so model it as `null` and say so.

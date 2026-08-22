@@ -1,5 +1,7 @@
 /* eslint-disable max-lines -- Why: runtime behavior is stateful and cross-cutting, so these tests stay in one file to preserve the end-to-end invariants around handles, waits, and graph sync. */
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { RuntimeBrowserCommands } from './orca-runtime-browser'
+import { setRuntimeBrowserCommandsFactory } from './runtime-browser-commands-factory'
 import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 import type * as GitUsernameModule from '../git/git-username'
@@ -677,6 +679,10 @@ vi.mock('../git/git-username', async () => {
 })
 
 function resetRuntimeTestMocks(): void {
+  // Why: constructing the browser commands is what pulls the Chromium cluster in, so
+  // production installs this at the Electron entry. A Node host installs none and the
+  // browser RPCs reject rather than silently succeeding.
+  setRuntimeBrowserCommandsFactory((host) => new RuntimeBrowserCommands(host))
   // Why: the runtime's notification, window lookup and tab-create-reply channel are
   // injected now, so the electron mock alone is inert. Back the surface with the same
   // mocks so every existing expectation still holds.

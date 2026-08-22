@@ -16,6 +16,8 @@ import { ElectronAppEnvironment } from './host/electron-app-environment'
 import { setPtyHostBindings } from './ipc/pty-host-bindings'
 import { electronRuntimeDesktopSurface } from './host/electron-runtime-desktop-surface'
 import { setRuntimeDesktopSurface } from './runtime/runtime-desktop-surface'
+import { electronRuntimeBrowserCommandsFactory } from './host/electron-browser-commands'
+import { setRuntimeBrowserCommandsFactory } from './runtime/runtime-browser-commands-factory'
 import { setSecretStore } from '../shared/secret-store'
 import { ElectronSecretStore } from './host/electron-secret-store'
 import { initSessionParseCachePersistence } from './ai-vault/session-parse-cache-persistence'
@@ -874,6 +876,10 @@ if (hasSingleInstanceLock) {
   // tab-create-reply channel are desktop-only. A Node host installs none and the
   // runtime routes notifications to paired clients instead.
   setRuntimeDesktopSurface(electronRuntimeDesktopSurface)
+  // Why here: constructing RuntimeBrowserCommands is what pulls the Chromium browser
+  // cluster into the graph. The desktop installs it; a Node host installs none and every
+  // browser RPC rejects, which capability filtering already tells clients about.
+  setRuntimeBrowserCommandsFactory(electronRuntimeBrowserCommandsFactory)
   // Why: couple to dev-parent only for electron-vite desktop runs; `orca serve`'s parent (CLI shim/background shell) isn't the intended server lifetime.
   const shouldCoupleToDevParent = is.dev && !isServeMode
   installDevParentDisconnectQuit(shouldCoupleToDevParent)

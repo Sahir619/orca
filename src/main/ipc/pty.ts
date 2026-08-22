@@ -1,17 +1,11 @@
 /* eslint-disable max-lines -- Why: PTY IPC is centralized in one main-process module so spawn env scoping, lifecycle cleanup, process inspection, and renderer IPC stay behind one audited boundary. */
 import { join, delimiter } from 'node:path'
 import { getAppEnvironment } from '../../shared/app-environment'
+import { getPtyIpc, getPtyPower, type PtyPowerSurface } from './pty-host-bindings'
 import { isRendererGone, rendererWebContents, sendToRenderer } from './pty-renderer-surface'
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
-import {
-  type BrowserWindow,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent,
-  type WebContents,
-  ipcMain,
-  powerMonitor
-} from 'electron'
+import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 export { getBashShellReadyRcfileContent } from '../providers/local-pty-shell-ready-bash-rcfile'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { PtyBindingSourceExpectation, Store } from '../persistence'
@@ -2281,16 +2275,16 @@ let lastPowerResumeAtMs: number | null = null
 let powerSignalBreadcrumbsInstalled = false
 
 // Why: both field freeze variants correlate with display sleep; suspend/resume timestamps let breadcrumbs line up against the wake.
-function installPowerSignalBreadcrumbs(): void {
+function installPowerSignalBreadcrumbs(power: PtyPowerSurface): void {
   if (powerSignalBreadcrumbsInstalled) {
     return
   }
   powerSignalBreadcrumbsInstalled = true
-  powerMonitor.on('suspend', () => {
+  power.on('suspend', () => {
     lastPowerSuspendAtMs = Date.now()
     mainDeliveryBreadcrumbs.record('power-suspend')
   })
-  powerMonitor.on('resume', () => {
+  power.on('resume', () => {
     lastPowerResumeAtMs = Date.now()
     mainDeliveryBreadcrumbs.record('power-resume')
   })
@@ -2449,6 +2443,7 @@ export function registerPtyHandlers(
     onPtyExit?: (id: string, exitSequence: number) => void
   }
 ): void {
+  const ipc = getPtyIpc()
   // Why: a re-registration means a new window owns delivery — cancel the prior closure's watchdog and neutralize its bridged reset so mark-hidden below can't arm a timer against the dead closure.
   clearRendererDispatcherReadyWatchdog()
   resetRendererDeliveryAccountingForLifecycleReset = () => {}
@@ -2477,32 +2472,32 @@ export function registerPtyHandlers(
   }
 
   // Remove prior handlers so re-registration (e.g. macOS re-activate creating a new window) doesn't double-register.
-  ipcMain.removeHandler('pty:spawn')
-  ipcMain.removeHandler('pty:kill')
-  ipcMain.removeHandler('pty:listSessions')
-  ipcMain.removeHandler('pty:hasPty')
-  ipcMain.removeHandler('pty:hasChildProcesses')
-  ipcMain.removeHandler('pty:getForegroundProcess')
-  ipcMain.removeHandler('pty:inspectProcess')
-  ipcMain.removeHandler('pty:confirmForegroundProcess')
-  ipcMain.removeHandler('pty:getCwd')
-  ipcMain.removeHandler('pty:getSize')
-  ipcMain.removeHandler('pty:getAuthoritativeBufferSnapshotCapabilities')
-  ipcMain.removeHandler('pty:declarePendingPaneSerializer')
-  ipcMain.removeHandler('pty:settlePaneSerializer')
-  ipcMain.removeHandler('pty:clearPendingPaneSerializer')
-  ipcMain.removeHandler('pty:reportRendererSerializerReady')
-  ipcMain.removeHandler('pty:getMainBufferSnapshot')
-  ipcMain.removeHandler('pty:sideEffectSnapshot')
-  ipcMain.removeHandler('pty:getRendererDeliveryDebugSnapshot')
-  ipcMain.removeHandler('pty:resetRendererDeliveryDebug')
-  ipcMain.removeHandler('pty:reportRendererDeliveryState')
-  ipcMain.removeHandler('pty:writeAccepted')
-  ipcMain.removeAllListeners('pty:write')
-  ipcMain.removeAllListeners('pty:ackColdRestore')
-  ipcMain.removeAllListeners('pty:ackData')
-  ipcMain.removeAllListeners('pty:deliveryResyncResponse')
-  ipcMain.removeAllListeners('pty:serializeBuffer:response')
+  ipc.removeHandler('pty:spawn')
+  ipc.removeHandler('pty:kill')
+  ipc.removeHandler('pty:listSessions')
+  ipc.removeHandler('pty:hasPty')
+  ipc.removeHandler('pty:hasChildProcesses')
+  ipc.removeHandler('pty:getForegroundProcess')
+  ipc.removeHandler('pty:inspectProcess')
+  ipc.removeHandler('pty:confirmForegroundProcess')
+  ipc.removeHandler('pty:getCwd')
+  ipc.removeHandler('pty:getSize')
+  ipc.removeHandler('pty:getAuthoritativeBufferSnapshotCapabilities')
+  ipc.removeHandler('pty:declarePendingPaneSerializer')
+  ipc.removeHandler('pty:settlePaneSerializer')
+  ipc.removeHandler('pty:clearPendingPaneSerializer')
+  ipc.removeHandler('pty:reportRendererSerializerReady')
+  ipc.removeHandler('pty:getMainBufferSnapshot')
+  ipc.removeHandler('pty:sideEffectSnapshot')
+  ipc.removeHandler('pty:getRendererDeliveryDebugSnapshot')
+  ipc.removeHandler('pty:resetRendererDeliveryDebug')
+  ipc.removeHandler('pty:reportRendererDeliveryState')
+  ipc.removeHandler('pty:writeAccepted')
+  ipc.removeAllListeners('pty:write')
+  ipc.removeAllListeners('pty:ackColdRestore')
+  ipc.removeAllListeners('pty:ackData')
+  ipc.removeAllListeners('pty:deliveryResyncResponse')
+  ipc.removeAllListeners('pty:serializeBuffer:response')
 
   // Why: only LocalPtyProvider needs main-process hook injection; daemon-backed providers spawn subprocesses internally.
   if (localProvider instanceof LocalPtyProvider) {
@@ -4165,7 +4160,7 @@ export function registerPtyHandlers(
     pending.resolve(result)
   }
 
-  ipcMain.on(
+  ipc.on(
     'pty:serializeBuffer:response',
     (
       _event,
@@ -5948,7 +5943,7 @@ export function registerPtyHandlers(
     return Math.max(0, Math.min(50_000, Math.floor(value)))
   }
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:getMainBufferSnapshot',
     async (
       _event,
@@ -6012,22 +6007,22 @@ export function registerPtyHandlers(
   )
 
   // Why: main owns side effects, so this replay restores title state only — never historical bells/completions (no-attention-replay rule, terminal-side-effect-authority.md).
-  ipcMain.handle('pty:sideEffectSnapshot', (_event, args: { id: string }) => {
+  ipc.handle('pty:sideEffectSnapshot', (_event, args: { id: string }) => {
     if (!runtime || typeof args?.id !== 'string' || args.id.length === 0) {
       return null
     }
     return runtime.getTerminalSideEffectSnapshot(args.id)
   })
 
-  installPowerSignalBreadcrumbs()
-  ipcMain.handle('pty:getRendererDeliveryDebugSnapshot', (): PtyRendererDeliveryDebugSnapshot => {
+  installPowerSignalBreadcrumbs(getPtyPower())
+  ipc.handle('pty:getRendererDeliveryDebugSnapshot', (): PtyRendererDeliveryDebugSnapshot => {
     return getPtyRendererDeliveryDebugSnapshot()
   })
-  ipcMain.handle('pty:resetRendererDeliveryDebug', (): void => {
+  ipc.handle('pty:resetRendererDeliveryDebug', (): void => {
     resetPtyRendererDeliveryDebug()
   })
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:spawn',
     async (
       _event,
@@ -7393,7 +7388,7 @@ export function registerPtyHandlers(
 
   const hostViewportClaimTails = new Map<string, Promise<boolean>>()
 
-  ipcMain.on('pty:write', (event, args: unknown) => {
+  ipc.on('pty:write', (event, args: unknown) => {
     if (
       !isPtyWriteEventFromMainWindow(event, rendererWebContents(mainWindow)) ||
       !isPtyWritePayload(args)
@@ -7407,7 +7402,7 @@ export function registerPtyHandlers(
     }
     writePtyInput(args)
   })
-  ipcMain.handle('pty:writeAccepted', (event, args: unknown): boolean | Promise<boolean> => {
+  ipc.handle('pty:writeAccepted', (event, args: unknown): boolean | Promise<boolean> => {
     if (
       !isPtyWriteEventFromMainWindow(event, rendererWebContents(mainWindow)) ||
       !isPtyWritePayload(args)
@@ -7420,8 +7415,8 @@ export function registerPtyHandlers(
       : writePtyInputAccepted(args)
   })
 
-  ipcMain.removeAllListeners('pty:claimViewport')
-  ipcMain.on('pty:claimViewport', (event, args: unknown) => {
+  ipc.removeAllListeners('pty:claimViewport')
+  ipc.on('pty:claimViewport', (event, args: unknown) => {
     if (
       !isPtyWriteEventFromMainWindow(event, rendererWebContents(mainWindow)) ||
       !runtime ||
@@ -7447,9 +7442,9 @@ export function registerPtyHandlers(
     })
   })
 
-  // Why: resize is fire-and-forget — ipcMain.on (not .handle) halves IPC traffic by skipping the empty acknowledgement reply.
-  ipcMain.removeAllListeners('pty:resize')
-  ipcMain.on('pty:resize', (_event, args: { id: string; cols: number; rows: number }) => {
+  // Why: resize is fire-and-forget — ipc.on (not .handle) halves IPC traffic by skipping the empty acknowledgement reply.
+  ipc.removeAllListeners('pty:resize')
+  ipc.on('pty:resize', (_event, args: { id: string; cols: number; rows: number }) => {
     // Why: after a desktop-fit override change the renderer's safeFit cascade re-measures ALL panes (background ones at full width), so suppress every pty:resize in this window to avoid corrupting PTY dimensions.
     if (runtime?.isResizeSuppressed()) {
       return
@@ -7489,13 +7484,13 @@ export function registerPtyHandlers(
   })
 
   // Why: pty:reportGeometry is a measurement-only sibling of pty:resize — it refreshes the restore-target cache (never resizes) so mobile-fit hold learns real desktop dims even while resize is blocked. See docs/mobile-fit-hold.md.
-  ipcMain.removeAllListeners('pty:reportGeometry')
-  ipcMain.on('pty:reportGeometry', (_event, args: { id: string; cols: number; rows: number }) => {
+  ipc.removeAllListeners('pty:reportGeometry')
+  ipc.on('pty:reportGeometry', (_event, args: { id: string; cols: number; rows: number }) => {
     runtime?.recordRendererGeometry(args.id, args.cols, args.rows)
   })
 
   // Why: fire-and-forget — clears the DaemonPtyAdapter's sticky cold-restore cache after the renderer consumed it; no-op for non-daemon providers.
-  ipcMain.on('pty:ackColdRestore', (_event, args: { id: string }) => {
+  ipc.on('pty:ackColdRestore', (_event, args: { id: string }) => {
     const provider = tryGetProviderForPty(args.id)
     if (provider && 'ackColdRestore' in provider && typeof provider.ackColdRestore === 'function') {
       provider.ackColdRestore(args.id)
@@ -7503,7 +7498,7 @@ export function registerPtyHandlers(
   })
 
   // Why: renderer ACKs bound main→renderer delivery without stopping PTY ingestion — agent/status consumers still see every chunk via the provider/runtime path.
-  ipcMain.on(
+  ipc.on(
     'pty:ackData',
     (_event, args: { id: string; charCount?: number; processedChars?: number }) => {
       lastAckReceivedAtMs = Date.now()
@@ -7523,7 +7518,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.on(
+  ipc.on(
     'pty:deliveryResyncResponse',
     (_event, args: { requestId: number; processedCharsByPty: Record<string, number> }) => {
       if (
@@ -7551,7 +7546,7 @@ export function registerPtyHandlers(
   )
 
   // Why invoke + renderer-initiated: the field wedge (v1.4.121-rc.0) kills every main→renderer push channel while invoke survives, so the resync rides here plus a write-off lane.
-  ipcMain.handle(
+  ipc.handle(
     'pty:reportRendererDeliveryState',
     (_event, args: PtyRendererDeliveryStateReport): PtyRendererDeliveryHealthReply => {
       // Extra repair lane for the lost-ACK variant: identical max-merge to the resync response, so a heal is only reached when merging cannot drain.
@@ -7594,8 +7589,8 @@ export function registerPtyHandlers(
   )
 
   // Why: renderer signals its pty:data listener is live; until then sends are held so boot-window bytes can't drop into a listener-less page and pin the gate.
-  ipcMain.removeAllListeners('pty:rendererDispatcherReady')
-  ipcMain.on('pty:rendererDispatcherReady', (event) => {
+  ipc.removeAllListeners('pty:rendererDispatcherReady')
+  ipc.on('pty:rendererDispatcherReady', (event) => {
     // Why: the reconcile below destructively clears delivery accounting, so a straggler handshake from a dying window must not reset the new window.
     if (!isPtyWriteEventFromMainWindow(event, rendererWebContents(mainWindow))) {
       return
@@ -7611,8 +7606,8 @@ export function registerPtyHandlers(
     schedulePendingDataFlush(0)
   })
 
-  ipcMain.removeAllListeners('pty:setActiveRendererPty')
-  ipcMain.on('pty:setActiveRendererPty', (_event, args: { id: string; active: boolean }) => {
+  ipc.removeAllListeners('pty:setActiveRendererPty')
+  ipc.on('pty:setActiveRendererPty', (_event, args: { id: string; active: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
@@ -7628,8 +7623,8 @@ export function registerPtyHandlers(
     invalidatePendingPtyDrainPriority(args.id)
   })
 
-  ipcMain.removeAllListeners('pty:setRendererPtyVisible')
-  ipcMain.on('pty:setRendererPtyVisible', (_event, args: { id: string; visible: boolean }) => {
+  ipc.removeAllListeners('pty:setRendererPtyVisible')
+  ipc.on('pty:setRendererPtyVisible', (_event, args: { id: string; visible: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
@@ -7644,8 +7639,8 @@ export function registerPtyHandlers(
     syncPtyBackgroundedDelivery(args.id, 'visibility-report')
   })
 
-  ipcMain.removeAllListeners('pty:setHiddenRendererPty')
-  ipcMain.on('pty:setHiddenRendererPty', (_event, args: { id: string; hidden: boolean }) => {
+  ipc.removeAllListeners('pty:setHiddenRendererPty')
+  ipc.on('pty:setHiddenRendererPty', (_event, args: { id: string; hidden: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
@@ -7689,8 +7684,8 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.removeAllListeners('pty:terminalViewAttributes')
-  ipcMain.on('pty:terminalViewAttributes', (_event, args: unknown) => {
+  ipc.removeAllListeners('pty:terminalViewAttributes')
+  ipc.on('pty:terminalViewAttributes', (_event, args: unknown) => {
     // Why validate-or-drop: a malformed palette gives a wrong color reply that breaks TUI theme detection worse than the silent-until-first-push default.
     const attributes = validateTerminalViewAttributes(args)
     if (attributes) {
@@ -7698,8 +7693,8 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.removeAllListeners('pty:setPtyDeliveryInterest')
-  ipcMain.on('pty:setPtyDeliveryInterest', (_event, args: { id: string; interested: boolean }) => {
+  ipc.removeAllListeners('pty:setPtyDeliveryInterest')
+  ipc.on('pty:setPtyDeliveryInterest', (_event, args: { id: string; interested: boolean }) => {
     if (typeof args.id !== 'string' || !args.id) {
       return
     }
@@ -7712,15 +7707,15 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.removeAllListeners('pty:signal')
-  ipcMain.on('pty:signal', (_event, args: { id: string; signal: string }) => {
+  ipc.removeAllListeners('pty:signal')
+  ipc.on('pty:signal', (_event, args: { id: string; signal: string }) => {
     tryGetProviderForPty(args.id)
       ?.sendSignal(args.id, args.signal)
       .catch(() => {})
   })
 
-  ipcMain.removeAllListeners('pty:clearBuffer')
-  ipcMain.on('pty:clearBuffer', (_event, args: { id: string }) => {
+  ipc.removeAllListeners('pty:clearBuffer')
+  ipc.on('pty:clearBuffer', (_event, args: { id: string }) => {
     // Why: clear PTY-side state (ConPTY/daemon/SSH buffer) so the next prompt repaint doesn't land at a stale cursor row.
     tryGetProviderForPty(args.id)
       ?.clearBuffer(args.id)
@@ -7728,7 +7723,7 @@ export function registerPtyHandlers(
     runtime?.clearHeadlessTerminalBuffer(args.id).catch(() => {})
   })
 
-  ipcMain.handle('pty:kill', async (_event, args: { id: string; keepHistory?: boolean }) => {
+  ipc.handle('pty:kill', async (_event, args: { id: string; keepHistory?: boolean }) => {
     if (typeof args?.id !== 'string' || !args.id || args.id.startsWith('remote:')) {
       // Why: runtime terminal handles belong to terminal.close; unowned PTY routing could target the local provider.
       throw new Error('Invalid PTY provider id')
@@ -7778,7 +7773,7 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.handle('pty:listSessions', async (): Promise<PtyListedSession[]> => {
+  ipc.handle('pty:listSessions', async (): Promise<PtyListedSession[]> => {
     const deduped = new Map<string, PtyListedSession>()
     const admission = new PtyProcessListAdmission()
     await visitPtyProcessListingsInBatches(
@@ -7810,7 +7805,7 @@ export function registerPtyHandlers(
     return Array.from(deduped.values())
   })
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:getAuthoritativeBufferSnapshotCapabilities',
     async (_event, args: { ids?: unknown }) => {
       const ids = Array.isArray(args?.ids) ? args.ids.slice(0, 512) : []
@@ -7858,7 +7853,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle('pty:hasPty', async (_event, args: { id: string }): Promise<boolean | null> => {
+  ipc.handle('pty:hasPty', async (_event, args: { id: string }): Promise<boolean | null> => {
     if (typeof args?.id !== 'string' || args.id.startsWith('remote:')) {
       // Why: same routing hazard pty:kill guards against — ptyOwnership never holds
       // a runtime terminal handle and parseAppSshPtyId ignores it, so the lookup
@@ -7882,17 +7877,14 @@ export function registerPtyHandlers(
     }
   })
 
-  ipcMain.handle(
-    'pty:hasChildProcesses',
-    async (_event, args: { id: string }): Promise<boolean> => {
-      if (!hasPtyProviderForInspection(args.id)) {
-        return false
-      }
-      return getProviderForPty(args.id).hasChildProcesses(args.id)
+  ipc.handle('pty:hasChildProcesses', async (_event, args: { id: string }): Promise<boolean> => {
+    if (!hasPtyProviderForInspection(args.id)) {
+      return false
     }
-  )
+    return getProviderForPty(args.id).hasChildProcesses(args.id)
+  })
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:getForegroundProcess',
     async (_event, args: { id: string }): Promise<string | null> => {
       if (!hasPtyProviderForInspection(args.id)) {
@@ -7902,11 +7894,11 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle('pty:inspectProcess', async (_event, args: { id: string }) =>
+  ipc.handle('pty:inspectProcess', async (_event, args: { id: string }) =>
     inspectPtyProviderProcessForRenderer(getProviderForPty(args.id), args.id)
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:confirmForegroundProcess',
     async (_event, args: { id: string }): Promise<string | null> => {
       if (!hasPtyProviderForInspection(args.id)) {
@@ -7919,7 +7911,7 @@ export function registerPtyHandlers(
   )
 
   // Why: Cmd+D split needs the live shell cwd so the new pane inherits it (not the worktree root); '' means unknown/unresolvable (Windows) → renderer falls through.
-  ipcMain.handle('pty:getCwd', async (_event, args: { id: string }): Promise<string> => {
+  ipc.handle('pty:getCwd', async (_event, args: { id: string }): Promise<string> => {
     try {
       return await getProviderForPty(args.id).getCwd(args.id)
     } catch {
@@ -7928,7 +7920,7 @@ export function registerPtyHandlers(
   })
 
   // Why: prefer the provider's APPLIED size over the requested ptySizes so the renderer's resume drift-check can spot a dropped resize; null means "cannot confirm" → re-forward once.
-  ipcMain.handle(
+  ipc.handle(
     'pty:getSize',
     async (_event, args: { id: string }): Promise<{ cols: number; rows: number } | null> => {
       const provider = tryGetProviderForPty(args.id)
@@ -7947,7 +7939,7 @@ export function registerPtyHandlers(
   )
 
   // Pre-signal handshake handlers (declare→spawn→settle/clear); see docs/mobile-prefer-renderer-scrollback.md and `pendingByPaneKey` above.
-  ipcMain.handle(
+  ipc.handle(
     'pty:declarePendingPaneSerializer',
     async (event, args: { paneKey?: unknown }): Promise<number> => {
       if (!isValidPaneKey(args.paneKey)) {
@@ -7957,7 +7949,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:settlePaneSerializer',
     async (_event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
       if (!isValidPaneKey(args.paneKey) || typeof args.gen !== 'number') {
@@ -7973,7 +7965,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:clearPendingPaneSerializer',
     async (_event, args: { paneKey?: unknown; gen?: unknown }): Promise<void> => {
       if (!isValidPaneKey(args.paneKey) || typeof args.gen !== 'number') {
@@ -7984,7 +7976,7 @@ export function registerPtyHandlers(
     }
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'pty:reportRendererSerializerReady',
     async (_event, args: { ptyId?: unknown }): Promise<void> => {
       if (

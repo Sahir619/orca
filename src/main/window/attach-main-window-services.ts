@@ -1,7 +1,8 @@
 /* eslint-disable max-lines -- Why: this file is the central main-window IPC wiring point; splitting it during the mobile release compatibility rebase would increase release risk. */
 import { randomUUID } from 'node:crypto'
+import { setPtyHostBindings } from '../ipc/pty-host-bindings'
 
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, powerMonitor } from 'electron'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import type { Store } from '../persistence'
 import type { ReleaseBuildListResult, UpdateCheckOptions } from '../../shared/update-status-types'
@@ -121,6 +122,10 @@ export function attachMainWindowServices(
   // marker poll to upgrade them without a restart (#11477).
   startFolderRepoGitUpgradeWatch(store, mainWindow)
   registerWorkspaceCleanupHandlers(store, { runtime, getLocalPtyProvider })
+  // Why here: pty.ts no longer imports electron, so the desktop installs the real
+  // registration surfaces before its handlers register. A headless host installs none
+  // and gets no-ops — there is no renderer to answer them.
+  setPtyHostBindings({ ipc: ipcMain, power: powerMonitor })
   registerPtyHandlers(
     mainWindow,
     runtime,

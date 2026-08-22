@@ -23,13 +23,17 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
-const BASELINE_PATH = path.join('config', 'runtime-electron-baseline.txt')
+// Why absolute, not cwd-relative: `pnpm lint` runs from the repo root but CI steps and
+// editors do not always, and a cwd-relative miss surfaced as an unhandled ENOENT stack
+// instead of a usable message.
+const ROOT = path.join(import.meta.dirname, '..', '..')
+const BASELINE_PATH = path.join(ROOT, 'config', 'runtime-electron-baseline.txt')
 
 // The two module graphs a Node backend would have to boot: the runtime service
 // itself and the RPC server that fronts it.
 const ENTRY_POINTS = [
-  path.join('src', 'main', 'runtime', 'orca-runtime.ts'),
-  path.join('src', 'main', 'runtime', 'runtime-rpc.ts')
+  path.join(ROOT, 'src', 'main', 'runtime', 'orca-runtime.ts'),
+  path.join(ROOT, 'src', 'main', 'runtime', 'runtime-rpc.ts')
 ]
 
 // Native addons and electron cannot be bundled; externalising them is what the
@@ -43,12 +47,13 @@ export async function collectElectronImporters(entryPoints = ENTRY_POINTS) {
     write: false,
     // Why outdir with write:false: esbuild refuses multiple entry points without one,
     // even though nothing is emitted — the metafile is all this reads.
-    outdir: 'runtime-electron-ratchet-metafile-only',
+    outdir: path.join(ROOT, 'runtime-electron-ratchet-metafile-only'),
     platform: 'node',
     target: 'node20',
     format: 'cjs',
     external: EXTERNAL,
     metafile: true,
+    absWorkingDir: ROOT,
     logLevel: 'silent',
     loader: { '.node': 'file' }
   })
@@ -57,7 +62,7 @@ export async function collectElectronImporters(entryPoints = ENTRY_POINTS) {
     for (const imported of info.imports ?? []) {
       // Subpaths (electron/main) are as unavailable under plain Node as the bare module.
       if (imported.path === 'electron' || imported.path.startsWith('electron/')) {
-        importers.add(file.split(path.sep).join('/'))
+        importers.add(path.relative(ROOT, path.resolve(ROOT, file)).split(path.sep).join('/'))
       }
     }
   }

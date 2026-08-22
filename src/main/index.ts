@@ -27,7 +27,6 @@ import { electronRuntimeDesktopSurface } from './host/electron-runtime-desktop-s
 import { setRuntimeDesktopSurface } from './runtime/runtime-desktop-surface'
 import { electronRuntimeBrowserCommandsFactory } from './host/electron-browser-commands'
 import { setRuntimeBrowserCommandsFactory } from './runtime/runtime-browser-commands-factory'
-import { setDefaultProxySessionResolver } from './network/proxy-settings'
 import { setSecretStore } from '../shared/secret-store'
 import { ElectronSecretStore } from './host/electron-secret-store'
 import { initSessionParseCachePersistence } from './ai-vault/session-parse-cache-persistence'
@@ -369,7 +368,10 @@ import {
 } from '../shared/runtime-types'
 import { LocalPtyProvider } from './providers/local-pty-provider'
 import { KeybindingService } from './keybindings/keybinding-service'
-import { applyElectronProxySettings } from './network/proxy-settings'
+import {
+  applyElectronProxySettings,
+  setDefaultProxySessionResolver
+} from './network/proxy-settings'
 import { preserveAgentAuthBeforeRestart } from './agent-auth-restart-preservation'
 import { CliInstaller } from './cli/cli-installer'
 import { installLinuxBareOrcaDispatcher } from './cli/linux-bare-orca-dispatcher'

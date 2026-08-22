@@ -730,8 +730,9 @@ import {
 } from '../../shared/claude-agent-teams-tmux-compat'
 import { joinWorktreeRelativePath } from './runtime-relative-paths'
 import { collectMemorySnapshot } from '../memory/collector'
-import { BrowserWindow, ipcMain, Notification } from 'electron'
+import type { BrowserWindow } from 'electron'
 import { getAppEnvironment } from '../../shared/app-environment'
+import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
 import { RendererPublicationThrottle } from '../window/renderer-publication-throttle'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
 import type { BrowserBackend } from '../browser/browser-backend'
@@ -14362,13 +14363,9 @@ export class OrcaRuntimeService {
     const body = input.body ?? ''
     let delivered = false
     try {
-      if (Notification.isSupported()) {
-        new Notification({ title, body }).show()
-        delivered = true
-      }
+      delivered = getRuntimeDesktopSurface().showNotification({ title, body })
     } catch {
-      // Headless serve has no notification display; the mobile relay below
-      // still runs.
+      // A host with no notification display still relays to paired clients below.
     }
     this.dispatchMobileNotification({ type: 'notification', source: 'plugin', title, body })
     return { delivered }
@@ -28400,7 +28397,7 @@ export class OrcaRuntimeService {
     // creates the tab and replies with the tabId so we can resolve the handle.
     const reply = await new Promise<{ tabId: string; title: string }>((resolve, reject) => {
       const timer = setTimeout(() => {
-        ipcMain.removeListener('terminal:tabCreateReply', handler)
+        getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
         reject(new Error('Terminal creation timed out'))
       }, 10_000)
 
@@ -28412,14 +28409,14 @@ export class OrcaRuntimeService {
           return
         }
         clearTimeout(timer)
-        ipcMain.removeListener('terminal:tabCreateReply', handler)
+        getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
         if (r.error) {
           reject(new Error(r.error))
         } else {
           resolve({ tabId: r.tabId!, title: r.title ?? launchOpts.title ?? '' })
         }
       }
-      ipcMain.on('terminal:tabCreateReply', handler)
+      getRuntimeDesktopSurface().onIpc('terminal:tabCreateReply', handler)
       win.webContents.send('terminal:requestTabCreate', {
         requestId,
         worktreeId,
@@ -28771,7 +28768,7 @@ export class OrcaRuntimeService {
       const requestId = randomUUID()
       const reply = await new Promise<{ tabId: string; title: string }>((resolve, reject) => {
         const timer = setTimeout(() => {
-          ipcMain.removeListener('terminal:tabCreateReply', handler)
+          getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
           opts.signal?.removeEventListener('abort', onAbort)
           reject(new Error('Terminal creation timed out'))
         }, 10_000)
@@ -28779,7 +28776,7 @@ export class OrcaRuntimeService {
         // its shell) stays alive for the host and mirrors on reconnect (#7718).
         const onAbort = (): void => {
           clearTimeout(timer)
-          ipcMain.removeListener('terminal:tabCreateReply', handler)
+          getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
           reject(new Error('client_disconnected'))
         }
 
@@ -28791,7 +28788,7 @@ export class OrcaRuntimeService {
             return
           }
           clearTimeout(timer)
-          ipcMain.removeListener('terminal:tabCreateReply', handler)
+          getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
           opts.signal?.removeEventListener('abort', onAbort)
           if (r.error) {
             reject(new Error(r.error))
@@ -28800,7 +28797,7 @@ export class OrcaRuntimeService {
           }
         }
         opts.signal?.addEventListener('abort', onAbort, { once: true })
-        ipcMain.on('terminal:tabCreateReply', handler)
+        getRuntimeDesktopSurface().onIpc('terminal:tabCreateReply', handler)
         win.webContents.send('terminal:requestTabCreate', {
           requestId,
           worktreeId,
@@ -38582,10 +38579,7 @@ export class OrcaRuntimeService {
     if (this.authoritativeWindowId === null) {
       return null
     }
-    if (!BrowserWindow?.fromId) {
-      return null
-    }
-    const win = BrowserWindow.fromId(this.authoritativeWindowId)
+    const win = getRuntimeDesktopSurface().findWindowById(this.authoritativeWindowId)
     return win && !win.isDestroyed() ? win : null
   }
 }

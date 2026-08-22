@@ -14,6 +14,8 @@ import {
 import { setAppEnvironment } from '../shared/app-environment'
 import { ElectronAppEnvironment } from './host/electron-app-environment'
 import { setPtyHostBindings } from './ipc/pty-host-bindings'
+import { electronRuntimeDesktopSurface } from './host/electron-runtime-desktop-surface'
+import { setRuntimeDesktopSurface } from './runtime/runtime-desktop-surface'
 import { setSecretStore } from '../shared/secret-store'
 import { ElectronSecretStore } from './host/electron-secret-store'
 import { initSessionParseCachePersistence } from './ai-vault/session-parse-cache-persistence'
@@ -868,6 +870,10 @@ if (hasSingleInstanceLock) {
   // meant `orca serve` registered its PTY handlers against no-ops before any window
   // attached, so a paired desktop owner never received them.
   setPtyHostBindings({ ipc: ipcMain, power: powerMonitor })
+  // Why also at process level: the runtime's notification, window-lookup and
+  // tab-create-reply channel are desktop-only. A Node host installs none and the
+  // runtime routes notifications to paired clients instead.
+  setRuntimeDesktopSurface(electronRuntimeDesktopSurface)
   // Why: couple to dev-parent only for electron-vite desktop runs; `orca serve`'s parent (CLI shim/background shell) isn't the intended server lifetime.
   const shouldCoupleToDevParent = is.dev && !isServeMode
   installDevParentDisconnectQuit(shouldCoupleToDevParent)

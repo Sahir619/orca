@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Why: runtime behavior is stateful and cross-cutting, so these tests stay in one file to preserve the end-to-end invariants around handles, waits, and graph sync. */
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 import type * as GitUsernameModule from '../git/git-username'
 import { performance } from 'node:perf_hooks'
@@ -676,6 +677,16 @@ vi.mock('../git/git-username', async () => {
 })
 
 function resetRuntimeTestMocks(): void {
+  // Why: the runtime's notification, window lookup and tab-create-reply channel are
+  // injected now, so the electron mock alone is inert. Back the surface with the same
+  // mocks so every existing expectation still holds.
+  setRuntimeDesktopSurface({
+    showNotification: () => true,
+    findWindowById: (id) => electronMocks.BrowserWindow.fromId(id) as never,
+    onIpc: (channel, listener) => electronMocks.ipcMain.on(channel, listener as never),
+    removeIpcListener: (channel, listener) =>
+      electronMocks.ipcMain.removeListener(channel, listener as never)
+  })
   resetPlatform()
   electronMocks.app.isPackaged = false
   // Why here and not the electron mock: the runtime reads paths and the packaged flag

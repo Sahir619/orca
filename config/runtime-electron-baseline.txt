@@ -25,6 +25,5 @@ src/main/jira/authenticated-request.ts
 src/main/network/proxy-settings.ts
 src/main/ports/port-scan-command-client.ts
 src/main/runtime/orca-runtime-browser.ts
-src/main/runtime/orca-runtime.ts
 src/main/speech/model-manager.ts
 src/main/speech/stt-service.ts

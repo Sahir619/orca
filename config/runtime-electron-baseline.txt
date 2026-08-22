@@ -3,7 +3,5 @@
 # This list may only SHRINK. Adding an entry means the runtime got less
 # portable; migrate the module behind a host port instead (src/main/host/).
 
-src/main/browser/cdp-bridge.ts
 src/main/ipc/filesystem-watcher.ts
-src/main/jira/authenticated-request.ts
 src/main/speech/model-manager.ts

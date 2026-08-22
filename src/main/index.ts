@@ -27,6 +27,8 @@ import { electronRuntimeDesktopSurface } from './host/electron-runtime-desktop-s
 import { setRuntimeDesktopSurface } from './runtime/runtime-desktop-surface'
 import { electronRuntimeBrowserCommandsFactory } from './host/electron-browser-commands'
 import { setRuntimeBrowserCommandsFactory } from './runtime/runtime-browser-commands-factory'
+import { electronHttpClient } from './host/electron-http-client'
+import { setMainHttpClient } from './network/http-client'
 import { setSecretStore } from '../shared/secret-store'
 import { ElectronSecretStore } from './host/electron-secret-store'
 import { initSessionParseCachePersistence } from './ai-vault/session-parse-cache-persistence'
@@ -896,6 +898,10 @@ if (hasSingleInstanceLock) {
   // desktop supplies it; a Node host has no Chromium proxy config to consult, so the
   // environment variables are the whole answer there.
   setDefaultProxySessionResolver(() => session.defaultSession)
+  // Why here: integrations fetch through Chromium's network stack on the desktop. A Node
+  // host falls back to globalThis.fetch, which is a real behavioural difference (proxy
+  // from the environment, Node's user agent) rather than a transparent swap.
+  setMainHttpClient(electronHttpClient)
   // Why: couple to dev-parent only for electron-vite desktop runs; `orca serve`'s parent (CLI shim/background shell) isn't the intended server lifetime.
   const shouldCoupleToDevParent = is.dev && !isServeMode
   installDevParentDisconnectQuit(shouldCoupleToDevParent)

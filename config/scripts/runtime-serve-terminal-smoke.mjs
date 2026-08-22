@@ -316,14 +316,19 @@ async function main() {
         )
       }
     }
-    child.kill('SIGTERM')
-    const exited = await Promise.race([
-      new Promise((r) => child.on('exit', () => r(true))),
-      new Promise((r) => setTimeout(() => r(false), SHUTDOWN_TIMEOUT_MS))
-    ])
-    if (!exited) {
-      child.kill('SIGKILL')
-      fail(`server did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM`)
+    // Why the exitCode guard: a server that died during boot has already exited, and
+    // waiting for a second 'exit' that will never fire reported a bogus shutdown failure
+    // stacked on top of the real error.
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM')
+      const exited = await Promise.race([
+        new Promise((r) => child.on('exit', () => r(true))),
+        new Promise((r) => setTimeout(() => r(false), SHUTDOWN_TIMEOUT_MS))
+      ])
+      if (!exited) {
+        child.kill('SIGKILL')
+        fail(`server did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM`)
+      }
     }
     rmSync(userDataDir, { recursive: true, force: true })
     if (seeded?.repoPath) {

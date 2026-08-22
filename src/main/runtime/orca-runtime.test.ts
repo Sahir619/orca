@@ -461,7 +461,7 @@ vi.mock('../ipc/ssh', () => ({
   getRegisteredSshState: () => ({ remotePlatform: 'linux' })
 }))
 
-vi.mock('../ipc/preflight', () => ({
+vi.mock('../preflight/agent-detection', () => ({
   detectInstalledAgentsWithShellPathHydration: detectInstalledAgentsWithShellPathHydrationMock,
   detectRemoteAgents: detectRemoteAgentsMock
 }))

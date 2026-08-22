@@ -570,7 +570,10 @@ import {
 } from '../../shared/tui-agent-config'
 import { resolveDraftPasteReadyTimeoutMs } from '../../shared/draft-paste-ready-timeout'
 import { createDraftPasteReadyScanner } from '../../shared/draft-paste-ready-scanner'
-import { detectInstalledAgentsWithShellPathHydration, detectRemoteAgents } from '../ipc/preflight'
+import {
+  detectInstalledAgentsWithShellPathHydration,
+  detectRemoteAgents
+} from '../preflight/agent-detection'
 import {
   markCodexProjectTrusted,
   markCopilotFolderTrusted,

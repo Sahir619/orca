@@ -24,7 +24,6 @@ src/main/ipc/filesystem-watcher.ts
 src/main/ipc/parcel-watcher-entry-path.ts
 src/main/ipc/plugin-marketplaces.ts
 src/main/ipc/plugins.ts
-src/main/ipc/preflight.ts
 src/main/ipc/pty.ts
 src/main/ipc/ssh-browse.ts
 src/main/ipc/ssh-passphrase.ts

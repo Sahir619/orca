@@ -73,7 +73,7 @@ export function setAppEnvironment(environment: AppEnvironment): void {
  * and a plain-Node fork — those legitimately have no app root and want null, not a throw.
  */
 export function hasAppEnvironment(): boolean {
-  return current !== null
+  return read() !== null
 }
 
 export function getAppEnvironment(): AppEnvironment {

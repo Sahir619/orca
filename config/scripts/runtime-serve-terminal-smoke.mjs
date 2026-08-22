@@ -20,7 +20,7 @@
  *   - the server exits when asked.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -44,14 +44,30 @@ function fail(message) {
   process.exitCode = 1
 }
 
+/**
+ * Prefer the CLI built from this checkout over whatever `orca` is on PATH: it is the
+ * version under test, and a CI runner has no installed Orca app to fall back on.
+ */
+function resolveCli() {
+  const built = join(projectDir, 'out', 'cli', 'index.js')
+  return existsSync(built)
+    ? { command: process.execPath, prefix: [built] }
+    : { command: 'orca', prefix: [] }
+}
+
 /** The `orca` CLI, driven with an explicit pairing code so it targets this server only. */
 function orca(pairingCode, args) {
-  const result = spawnSync('orca', [...args, '--pairing-code', pairingCode, '--json'], {
-    encoding: 'utf8',
-    // Why not shell:true — argument encoding is handled by spawnSync; a shell would
-    // re-split the pairing code, which is base64url and can contain '='.
-    shell: false
-  })
+  const cli = resolveCli()
+  const result = spawnSync(
+    cli.command,
+    [...cli.prefix, ...args, '--pairing-code', pairingCode, '--json'],
+    {
+      encoding: 'utf8',
+      // Why not shell:true — argument encoding is handled by spawnSync; a shell would
+      // re-split the pairing code, which is base64url and can contain '='.
+      shell: false
+    }
+  )
   if (result.error) {
     throw new Error(`orca ${args[0]} failed to spawn: ${result.error.message}`)
   }
@@ -289,9 +305,11 @@ async function main() {
   } finally {
     // Why before SIGTERM: worktree removal is a server operation, so it needs the server.
     if (seeded?.worktreeId && pairing) {
+      const cleanupCli = resolveCli()
       const removed = spawnSync(
-        'orca',
+        cleanupCli.command,
         [
+          ...cleanupCli.prefix,
           'worktree',
           'rm',
           '--worktree',

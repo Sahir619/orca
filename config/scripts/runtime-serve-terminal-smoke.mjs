@@ -22,7 +22,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import process from 'node:process'
 
@@ -290,6 +290,12 @@ async function main() {
         ],
         { encoding: 'utf8' }
       )
+      // Why the parent too: `worktree rm` removes the worktree directory, leaving the
+      // empty `<workspaces>/<repo-name>/` container behind. Every run would leak one.
+      const worktreePath = seeded.worktreeId.split('::')[1]
+      if (removed.status === 0 && worktreePath) {
+        rmSync(dirname(worktreePath), { recursive: true, force: true })
+      }
       if (removed.status !== 0) {
         log(
           `WARN: could not remove seeded worktree ${seeded.worktreeId}: ` +

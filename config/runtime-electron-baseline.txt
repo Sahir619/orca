@@ -3,7 +3,6 @@
 # This list may only SHRINK. Adding an entry means the runtime got less
 # portable; migrate the module behind a host port instead (src/main/host/).
 
-src/main/agent-hooks/wsl-hook-relay-launch.ts
 src/main/ai-vault/session-scanner-service-entry-path.ts
 src/main/browser/browser-cookie-clear-store.ts
 src/main/browser/browser-cookie-import.ts
@@ -24,17 +23,10 @@ src/main/ipc/filesystem-watcher.ts
 src/main/ipc/parcel-watcher-entry-path.ts
 src/main/ipc/plugin-marketplaces.ts
 src/main/ipc/plugins.ts
-src/main/ipc/pty.ts
-src/main/ipc/ssh-browse.ts
-src/main/ipc/ssh-passphrase.ts
-src/main/ipc/ssh.ts
 src/main/jira/authenticated-request.ts
 src/main/network/proxy-settings.ts
-src/main/persistence/loading-store/user-data-path.ts
 src/main/ports/port-scan-command-client.ts
 src/main/runtime/orca-runtime-browser.ts
 src/main/runtime/orca-runtime.ts
 src/main/speech/model-manager.ts
 src/main/speech/stt-service.ts
-src/main/ssh/ssh-relay-deploy.ts
-src/main/ssh/ssh-remote-cli-host-passthrough.ts

@@ -456,7 +456,7 @@ vi.mock('../providers/ssh-git-dispatch', () => ({
   unregisterSshGitProvider: unregisterSshGitProviderMock
 }))
 
-vi.mock('../ipc/ssh', () => ({
+vi.mock('../ssh/ssh-target-registry', () => ({
   getActiveMultiplexer: getActiveMultiplexerMock,
   getRegisteredSshState: () => ({ remotePlatform: 'linux' })
 }))

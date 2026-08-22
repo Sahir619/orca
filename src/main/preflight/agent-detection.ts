@@ -15,7 +15,7 @@ import { getBitbucketAuthStatus } from '../bitbucket/client'
 import { getGiteaAuthStatus } from '../gitea/client'
 import { _resetKnownHostsCache } from '../gitlab/gl-utils'
 import { mergePersistedWindowsPathAsync } from '../pty/windows-environment-path'
-import { getActiveMultiplexer } from '../ipc/ssh'
+import { getActiveMultiplexer } from '../ssh/ssh-target-registry'
 import {
   detectWslCommandsOnPath,
   type WslPreflightTarget

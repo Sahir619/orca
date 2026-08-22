@@ -371,7 +371,7 @@ import {
   type ExecutionHostId
 } from '../../shared/execution-host'
 import { preservedBranchCleanupScopeKey } from '../../shared/preserved-branch-cleanup'
-import { getRegisteredSshState } from '../ipc/ssh'
+import { getRegisteredSshState } from '../ssh/ssh-target-registry'
 import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig

@@ -104,7 +104,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
   const {
     agent,
     worktreeId,
-    groupId,
+    groupId: callerGroupId,
     prompt,
     agentArgs,
     initialCwd,
@@ -118,6 +118,8 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     activate
   } = args
   const store = useAppStore.getState()
+  // Why optional call: launch tests fake @/store with partial doubles.
+  const groupId = store.resolveAgentLaunchGroupId?.(worktreeId, callerGroupId) ?? callerGroupId
   const { worktreeSshConnectionId, resolvedLaunchPlatform, isRemote, queuedShell } =
     resolveAgentLaunchExecutionContext(store, {
       worktreeId,
